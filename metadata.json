@@ -1,0 +1,5 @@
+{
+  "name": "WebP to PNG Converter",
+  "description": "A fast, privacy-focused batch converter to transform WebP images into high-quality PNGs directly in your browser.",
+  "requestFramePermissions": []
+}
