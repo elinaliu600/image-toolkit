@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Images, Zap, Trash2, DownloadCloud, Loader2, Menu, X,
-  FileImage, FileType, Minimize2, Maximize2, Film, Box, ArrowRightLeft
+  FileImage, FileType, Minimize2, Maximize2, Film, Box, ArrowRightLeft, Crop
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { Sidebar } from './components/Sidebar';
@@ -11,9 +11,11 @@ import { IcoOptions } from './components/IcoOptions';
 import { GifFrameList } from './components/GifFrameList';
 import { CompressOptions } from './components/CompressOptions';
 import { ResizeOptions } from './components/ResizeOptions';
+import { CropOptions } from './components/CropOptions';
+import { PixelCrop } from 'react-image-crop';
 import { ImageFile, ConversionStatus, ToolConfig, GifFrame, ICO_SIZES } from './types';
 import {
-  convertImage, compressImage, resizeImage, generateIco, extractGifFrames, formatBytes
+  convertImage, compressImage, resizeImage, cropImage, generateIco, extractGifFrames, formatBytes
 } from './services/converter';
 
 // Simple ID generator
@@ -96,6 +98,15 @@ const TOOLS: ToolConfig[] = [
     toolType: 'resize',
     category: 'optimize'
   },
+  {
+    id: 'crop',
+    name: '批量裁切',
+    description: '批量裁切图片到指定区域',
+    icon: Crop,
+    accept: 'image/*',
+    toolType: 'crop',
+    category: 'optimize'
+  },
   // Special tools
   {
     id: 'ico-generator',
@@ -146,11 +157,31 @@ const App: React.FC = () => {
   const [batchTargetFormat, setBatchTargetFormat] = useState(BATCH_FORMATS[0]);
   const [isExtractingGif, setIsExtractingGif] = useState(false);
 
+  // Crop states
+  // Crop states
+  const [crop, setCrop] = useState<PixelCrop>({ unit: 'px', x: 0, y: 0, width: 0, height: 0 });
+  const [activeCropFileId, setActiveCropFileId] = useState<string>('');
+
+  // Watch for crop changes to reset status
+  // We need to use a ref or check if crop actually changed to avoid loop?
+  // Actually, simpler: when setCrop is called (via user interaction), we trigger reset.
+  // We'll wrap setCrop in a handler that also resets statuses.
+  const handleCropChange = (newCrop: PixelCrop) => {
+    setCrop(newCrop);
+    // Reset completed files to IDLE if we are in crop mode
+    if (activeTool.toolType === 'crop' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
+      setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
+    }
+  };
+
   // Clear files when tool changes
   useEffect(() => {
     setFiles([]);
     setGifFrames([]);
+    setGifFrames([]);
     setGifFileName('');
+    setCrop({ unit: 'px', x: 0, y: 0, width: 0, height: 0 });
+    setActiveCropFileId('');
   }, [activeTool]);
 
   // Update resize dimensions when first file is added
@@ -166,6 +197,13 @@ const App: React.FC = () => {
       img.src = files[0].previewUrl;
     }
   }, [files, activeTool]);
+
+  // Set initial crop file when files added
+  useEffect(() => {
+    if (activeTool.toolType === 'crop' && files.length > 0 && !activeCropFileId) {
+      setActiveCropFileId(files[0].id);
+    }
+  }, [files, activeTool, activeCropFileId]);
 
   const handleFilesSelected = useCallback((newFiles: File[]) => {
     if (activeTool.toolType === 'gif-extract') {
@@ -238,6 +276,16 @@ const App: React.FC = () => {
           break;
         case 'resize':
           convertedBlob = await resizeImage(fileItem.file, resizeWidth, resizeHeight, maintainAspect);
+          break;
+        case 'crop':
+          // Ensure we have valid crop
+          if (crop.width > 0 && crop.height > 0) {
+            convertedBlob = await cropImage(fileItem.file, crop.x, crop.y, crop.width, crop.height);
+          } else {
+            // Return original if no crop set? Or fail? 
+            // Better to return original or error. returning original for safety.
+            convertedBlob = await convertImage(fileItem.file, fileItem.file.type);
+          }
           break;
         case 'ico':
           if (icoSizes.length === 0) {
@@ -356,7 +404,8 @@ const App: React.FC = () => {
 
             {files.length > 0 && activeTool.toolType !== 'gif-extract' && (
               <div className="flex items-center gap-3">
-                {idleCount > 0 && (
+                <div className="flex gap-2">
+
                   <button
                     onClick={handleConvertAll}
                     disabled={isProcessingAll || (activeTool.toolType === 'ico' && icoSizes.length === 0)}
@@ -367,9 +416,10 @@ const App: React.FC = () => {
                     ) : (
                       <Zap className="w-5 h-5" />
                     )}
-                    转换全部 ({idleCount})
+                    转换全部 ({idleCount > 0 ? idleCount : files.length})
                   </button>
-                )}
+
+                </div>
 
                 {completedCount > 1 && (
                   <button
@@ -421,6 +471,20 @@ const App: React.FC = () => {
               onMaintainAspectChange={setMaintainAspect}
             />
           )}
+
+          {activeTool.toolType === 'crop' && files.length > 0 && (() => {
+            const activeFile = files.find(f => f.id === activeCropFileId) || files[0];
+            return (
+              <CropOptions
+                imgSrc={activeFile.previewUrl}
+                crop={crop}
+                onCropChange={handleCropChange}
+                files={files.map(f => ({ id: f.id, name: f.file.name }))}
+                activeFileId={activeCropFileId || activeFile.id}
+                onActiveFileChange={setActiveCropFileId}
+              />
+            );
+          })()}
 
           {activeTool.id === 'batch-convert' && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">

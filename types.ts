@@ -7,10 +7,11 @@ export enum ConversionStatus {
   ERROR = 'ERROR',
 }
 
-export type ToolType = 
+export type ToolType =
   | 'convert'      // Basic format conversion
   | 'compress'     // Image compression
   | 'resize'       // Image resizing
+  | 'crop'         // Image cropping
   | 'ico'          // ICO generator
   | 'gif-extract'; // GIF frame extraction
 

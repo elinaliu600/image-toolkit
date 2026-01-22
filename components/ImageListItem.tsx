@@ -15,7 +15,7 @@ export const ImageListItem: React.FC<ImageListItemProps> = ({ item, targetExt, o
       {/* Thumbnail */}
       <div className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
         <img
-          src={item.previewUrl}
+          src={item.status === ConversionStatus.COMPLETED && item.convertedUrl ? item.convertedUrl : item.previewUrl}
           alt={item.file.name}
           className="w-full h-full object-cover"
         />
