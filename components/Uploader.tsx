@@ -24,20 +24,40 @@ export const Uploader: React.FC<UploaderProps> = ({ onFilesSelected, accept, des
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // Filter based on accept type (simple check)
-      // accept usually looks like "image/webp" or "image/*"
-      const allowedType = accept.replace('image/', '').replace('*', '');
-      
-      const droppedFiles = (Array.from(e.dataTransfer.files) as File[]).filter(
-        file => file.type.includes(allowedType) || accept === 'image/*'
-      );
 
-      if (droppedFiles.length > 0) {
-        onFilesSelected(droppedFiles);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files) as File[];
+
+      // Parse accept string into an array of accepted types/extensions
+      const acceptParts = accept.split(',').map(s => s.trim().toLowerCase());
+
+      const validFiles = droppedFiles.filter(file => {
+        const fileType = file.type.toLowerCase();
+        const fileName = file.name.toLowerCase();
+        const fileExt = '.' + fileName.split('.').pop();
+
+        return acceptParts.some(part => {
+          // Handle wildcard like "image/*"
+          if (part.endsWith('/*')) {
+            const category = part.replace('/*', '');
+            return fileType.startsWith(category);
+          }
+          // Handle MIME type like "image/png"
+          if (part.includes('/')) {
+            return fileType === part;
+          }
+          // Handle extension like ".svg" or ".pdf"
+          if (part.startsWith('.')) {
+            return fileExt === part;
+          }
+          return false;
+        });
+      });
+
+      if (validFiles.length > 0) {
+        onFilesSelected(validFiles);
       } else {
-        alert(`Please drop valid images (${accept})`);
+        alert(`请上传支持的文件格式`);
       }
     }
   }, [onFilesSelected, accept]);
@@ -65,8 +85,8 @@ export const Uploader: React.FC<UploaderProps> = ({ onFilesSelected, accept, des
         flex flex-col items-center justify-center
         w-full h-64 rounded-2xl border-2 border-dashed
         transition-all duration-300 ease-in-out
-        ${isDragging 
-          ? 'border-indigo-500 bg-indigo-50 scale-[1.01]' 
+        ${isDragging
+          ? 'border-indigo-500 bg-indigo-50 scale-[1.01]'
           : 'border-slate-300 bg-white hover:border-indigo-400 hover:bg-slate-50'
         }
       `}
@@ -79,12 +99,12 @@ export const Uploader: React.FC<UploaderProps> = ({ onFilesSelected, accept, des
         className="hidden"
         onChange={handleFileInputChange}
       />
-      
+
       <div className={`p-4 rounded-full mb-4 transition-colors ${isDragging ? 'bg-indigo-100' : 'bg-slate-100 group-hover:bg-indigo-50'}`}>
         {isDragging ? (
-           <Upload className="w-10 h-10 text-indigo-600" />
+          <Upload className="w-10 h-10 text-indigo-600" />
         ) : (
-           <ImagePlus className="w-10 h-10 text-slate-400 group-hover:text-indigo-500" />
+          <ImagePlus className="w-10 h-10 text-slate-400 group-hover:text-indigo-500" />
         )}
       </div>
 

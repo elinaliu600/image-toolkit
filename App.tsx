@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Images, Zap, Trash2, DownloadCloud, Loader2, Menu, X,
-  FileImage, FileType, Minimize2, Maximize2, Film, Box, ArrowRightLeft, Crop
+  FileImage, FileType, Minimize2, Maximize2, Film, Box, ArrowRightLeft, Crop,
+  RotateCw, Sun, Contrast, Type, Stamp, Rows, LayoutGrid, Pipette, Camera, Clapperboard
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { Sidebar } from './components/Sidebar';
@@ -12,10 +13,20 @@ import { GifFrameList } from './components/GifFrameList';
 import { CompressOptions } from './components/CompressOptions';
 import { ResizeOptions } from './components/ResizeOptions';
 import { CropOptions } from './components/CropOptions';
+import { RotateOptions } from './components/RotateOptions';
+import { BrightnessOptions } from './components/BrightnessOptions';
+import { TextWatermarkOptions } from './components/TextWatermarkOptions';
+import { ImageWatermarkOptions } from './components/ImageWatermarkOptions';
+import { LongImageOptions } from './components/LongImageOptions';
+import { ColorPickerOptions } from './components/ColorPickerOptions';
+import { VideoScreenshotOptions } from './components/VideoScreenshotOptions';
 import { PixelCrop } from 'react-image-crop';
 import { ImageFile, ConversionStatus, ToolConfig, GifFrame, ICO_SIZES } from './types';
 import {
-  convertImage, compressImage, resizeImage, cropImage, generateIco, extractGifFrames, formatBytes
+  convertImage, compressImage, resizeImage, cropImage, generateIco, extractGifFrames, formatBytes,
+  rotateImage, adjustBrightnessContrast, grayscaleImage,
+  addTextWatermark, addImageWatermark, stitchImages,
+  TextWatermarkOptions as TextWatermarkOptionsType, ImageWatermarkOptions as ImageWatermarkOptionsType, StitchOptions
 } from './services/converter';
 
 // Simple ID generator
@@ -23,63 +34,20 @@ const generateId = () => Math.random().toString(36).substring(2, 9) + Date.now()
 
 // Define available tools
 const TOOLS: ToolConfig[] = [
-  // Format conversion tools
+  // ========== 格式转换 ==========
   {
-    id: 'webp-to-png',
-    name: 'WebP → PNG',
-    description: '将 WebP 图片转换为 PNG 格式',
-    icon: Images,
-    accept: 'image/webp',
-    targetFormat: 'image/png',
-    targetExt: 'png',
-    toolType: 'convert',
-    category: 'format'
-  },
-  {
-    id: 'png-to-webp',
-    name: 'PNG → WebP',
-    description: '将 PNG 图片转换为 WebP 格式，减小体积',
-    icon: FileType,
-    accept: 'image/png',
-    targetFormat: 'image/webp',
-    targetExt: 'webp',
-    toolType: 'convert',
-    category: 'format'
-  },
-  {
-    id: 'png-to-jpg',
-    name: 'PNG → JPG',
-    description: '将 PNG 转换为 JPG（不保留透明度）',
-    icon: FileImage,
-    accept: 'image/png',
-    targetFormat: 'image/jpeg',
-    targetExt: 'jpg',
-    toolType: 'convert',
-    category: 'format'
-  },
-  {
-    id: 'jpg-to-png',
-    name: 'JPG → PNG',
-    description: '将 JPG 转换为 PNG 格式',
-    icon: FileImage,
-    accept: 'image/jpeg',
-    targetFormat: 'image/png',
-    targetExt: 'png',
-    toolType: 'convert',
-    category: 'format'
-  },
-  {
-    id: 'batch-convert',
-    name: '批量转换',
-    description: '任意图片格式互转',
+    id: 'format-convert',
+    name: '图片格式转换',
+    description: '支持 PNG/JPG/WebP/SVG/PDF 输入，转换为 PNG/JPG/WebP 输出',
     icon: ArrowRightLeft,
-    accept: 'image/*',
+    accept: 'image/*,.svg,.pdf',
     targetFormat: 'image/png',
     targetExt: 'png',
     toolType: 'convert',
     category: 'format'
   },
-  // Optimization tools
+
+  // ========== 图片编辑 ==========
   {
     id: 'compress',
     name: '图片压缩',
@@ -87,7 +55,7 @@ const TOOLS: ToolConfig[] = [
     icon: Minimize2,
     accept: 'image/jpeg,image/png,image/webp',
     toolType: 'compress',
-    category: 'optimize'
+    category: 'edit'
   },
   {
     id: 'resize',
@@ -96,7 +64,7 @@ const TOOLS: ToolConfig[] = [
     icon: Maximize2,
     accept: 'image/*',
     toolType: 'resize',
-    category: 'optimize'
+    category: 'edit'
   },
   {
     id: 'crop',
@@ -105,19 +73,90 @@ const TOOLS: ToolConfig[] = [
     icon: Crop,
     accept: 'image/*',
     toolType: 'crop',
-    category: 'optimize'
+    category: 'edit'
   },
-  // Special tools
   {
-    id: 'ico-generator',
-    name: 'ICO 生成器',
-    description: '生成多尺寸 ICO 图标文件',
-    icon: Box,
-    accept: 'image/png,image/jpeg,image/webp',
-    targetExt: 'ico',
-    toolType: 'ico',
-    category: 'special'
+    id: 'rotate',
+    name: '旋转/翻转',
+    description: '旋转或镜像翻转图片',
+    icon: RotateCw,
+    accept: 'image/*',
+    toolType: 'rotate',
+    category: 'edit'
   },
+  {
+    id: 'brightness',
+    name: '亮度/对比度',
+    description: '调整图片亮度和对比度',
+    icon: Sun,
+    accept: 'image/*',
+    toolType: 'brightness',
+    category: 'edit'
+  },
+  {
+    id: 'grayscale',
+    name: '黑白/去色',
+    description: '将图片转为黑白效果',
+    icon: Contrast,
+    accept: 'image/*',
+    toolType: 'grayscale',
+    category: 'edit'
+  },
+
+  // ========== 水印工具 ==========
+  {
+    id: 'text-watermark',
+    name: '文字水印',
+    description: '批量添加文字水印',
+    icon: Type,
+    accept: 'image/*',
+    toolType: 'text-watermark',
+    category: 'watermark'
+  },
+  {
+    id: 'image-watermark',
+    name: '图片水印',
+    description: '批量添加 Logo 水印',
+    icon: Stamp,
+    accept: 'image/*',
+    toolType: 'image-watermark',
+    category: 'watermark'
+  },
+
+  // ========== 拼图工具 ==========
+  {
+    id: 'long-image',
+    name: '长图拼接',
+    description: '多张图片拼接成长图',
+    icon: Rows,
+    accept: 'image/*',
+    toolType: 'long-image',
+    category: 'collage'
+  },
+
+  // ========== 取色工具 ==========
+  {
+    id: 'color-picker',
+    name: '拾色器',
+    description: '从图片中吸取颜色',
+    icon: Pipette,
+    accept: 'image/*',
+    toolType: 'color-picker',
+    category: 'color'
+  },
+
+  // ========== 视频工具 ==========
+  {
+    id: 'video-screenshot',
+    name: '视频截图',
+    description: '从视频中截取帧画面',
+    icon: Camera,
+    accept: 'video/*',
+    toolType: 'video-screenshot',
+    category: 'video'
+  },
+
+  // ========== 动图工具 ==========
   {
     id: 'gif-extract',
     name: 'GIF 帧提取',
@@ -126,7 +165,28 @@ const TOOLS: ToolConfig[] = [
     accept: 'image/gif',
     targetExt: 'png',
     toolType: 'gif-extract',
-    category: 'special'
+    category: 'animation'
+  },
+  {
+    id: 'ico-generator',
+    name: 'ICO 生成器',
+    description: '生成多尺寸 ICO 图标文件',
+    icon: Box,
+    accept: 'image/png,image/jpeg,image/webp',
+    targetExt: 'ico',
+    toolType: 'ico',
+    category: 'animation'
+  },
+  {
+    id: 'apng',
+    name: 'APNG 动图制作',
+    description: '多张 PNG 合成动态 PNG',
+    icon: Clapperboard,
+    accept: 'image/png',
+    targetExt: 'apng',
+    toolType: 'apng',
+    category: 'animation',
+    disabled: true
   },
 ];
 
@@ -135,6 +195,8 @@ const BATCH_FORMATS = [
   { label: 'PNG', format: 'image/png', ext: 'png' },
   { label: 'JPG', format: 'image/jpeg', ext: 'jpg' },
   { label: 'WebP', format: 'image/webp', ext: 'webp' },
+  { label: 'GIF', format: 'image/gif', ext: 'gif' },
+  { label: 'BMP', format: 'image/bmp', ext: 'bmp' },
 ];
 
 const App: React.FC = () => {
@@ -158,18 +220,81 @@ const App: React.FC = () => {
   const [isExtractingGif, setIsExtractingGif] = useState(false);
 
   // Crop states
-  // Crop states
   const [crop, setCrop] = useState<PixelCrop>({ unit: 'px', x: 0, y: 0, width: 0, height: 0 });
   const [activeCropFileId, setActiveCropFileId] = useState<string>('');
 
+  // Rotate states
+  const [rotateAngle, setRotateAngle] = useState(0);
+  const [flipH, setFlipH] = useState(false);
+  const [flipV, setFlipV] = useState(false);
+
+  // Brightness/Contrast states
+  const [brightness, setBrightness] = useState(0);
+  const [contrast, setContrast] = useState(0);
+
+  // Text watermark states
+  const [wmText, setWmText] = useState('水印文字');
+  const [wmFontSize, setWmFontSize] = useState(48);
+  const [wmFontFamily, setWmFontFamily] = useState('sans-serif');
+  const [wmColor, setWmColor] = useState('#000000');
+  const [wmOpacity, setWmOpacity] = useState(0.5);
+  const [wmPosition, setWmPosition] = useState<'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'tile'>('bottom-right');
+  const [wmRotation, setWmRotation] = useState(0);
+
+  // Image watermark states
+  const [imgWmFile, setImgWmFile] = useState<File | null>(null);
+  const [imgWmPosition, setImgWmPosition] = useState<'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'tile'>('bottom-right');
+  const [imgWmOpacity, setImgWmOpacity] = useState(0.7);
+  const [imgWmScale, setImgWmScale] = useState(0.3);
+
+  // Long image stitch options
+  const [stitchDirection, setStitchDirection] = useState<'vertical' | 'horizontal'>('vertical');
+  const [stitchGap, setStitchGap] = useState(0);
+  const [stitchBorderRadius, setStitchBorderRadius] = useState(0);
+  const [stitchBgColor, setStitchBgColor] = useState('#FFFFFF');
+
+  // Video screenshot state
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoScreenshots, setVideoScreenshots] = useState<{ blob: Blob; timestamp: number }[]>([]);
+
   // Watch for crop changes to reset status
-  // We need to use a ref or check if crop actually changed to avoid loop?
-  // Actually, simpler: when setCrop is called (via user interaction), we trigger reset.
-  // We'll wrap setCrop in a handler that also resets statuses.
   const handleCropChange = (newCrop: PixelCrop) => {
     setCrop(newCrop);
-    // Reset completed files to IDLE if we are in crop mode
     if (activeTool.toolType === 'crop' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
+      setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
+    }
+  };
+
+  // Wrapper for rotate changes - reset status on change
+  const handleRotateAngleChange = (angle: number) => {
+    setRotateAngle(angle);
+    if (activeTool.toolType === 'rotate' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
+      setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
+    }
+  };
+  const handleFlipHChange = (flip: boolean) => {
+    setFlipH(flip);
+    if (activeTool.toolType === 'rotate' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
+      setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
+    }
+  };
+  const handleFlipVChange = (flip: boolean) => {
+    setFlipV(flip);
+    if (activeTool.toolType === 'rotate' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
+      setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
+    }
+  };
+
+  // Wrapper for brightness changes - reset status on change
+  const handleBrightnessChange = (value: number) => {
+    setBrightness(value);
+    if (activeTool.toolType === 'brightness' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
+      setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
+    }
+  };
+  const handleContrastChange = (value: number) => {
+    setContrast(value);
+    if (activeTool.toolType === 'brightness' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
       setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
     }
   };
@@ -222,6 +347,15 @@ const App: React.FC = () => {
             setIsExtractingGif(false);
             alert('GIF 帧提取失败: ' + error.message);
           });
+      }
+      return;
+    }
+
+    // For video screenshot, handle video file separately
+    if (activeTool.toolType === 'video-screenshot') {
+      if (newFiles.length > 0) {
+        setVideoFile(newFiles[0]);
+        setVideoScreenshots([]);
       }
       return;
     }
@@ -293,9 +427,39 @@ const App: React.FC = () => {
           }
           convertedBlob = await generateIco(fileItem.file, icoSizes);
           break;
+        case 'rotate':
+          convertedBlob = await rotateImage(fileItem.file, rotateAngle, flipH, flipV);
+          break;
+        case 'brightness':
+          convertedBlob = await adjustBrightnessContrast(fileItem.file, brightness, contrast);
+          break;
+        case 'grayscale':
+          convertedBlob = await grayscaleImage(fileItem.file);
+          break;
+        case 'text-watermark':
+          convertedBlob = await addTextWatermark(fileItem.file, {
+            text: wmText,
+            fontSize: wmFontSize,
+            fontFamily: wmFontFamily,
+            color: wmColor,
+            opacity: wmOpacity,
+            position: wmPosition,
+            rotation: wmRotation,
+          });
+          break;
+        case 'image-watermark':
+          if (!imgWmFile) {
+            throw new Error('请先上传水印图片');
+          }
+          convertedBlob = await addImageWatermark(fileItem.file, imgWmFile, {
+            position: imgWmPosition,
+            opacity: imgWmOpacity,
+            scale: imgWmScale,
+          });
+          break;
         case 'convert':
         default:
-          const targetFormat = activeTool.id === 'batch-convert'
+          const targetFormat = activeTool.id === 'format-convert'
             ? batchTargetFormat.format
             : activeTool.targetFormat!;
           convertedBlob = await convertImage(fileItem.file, targetFormat);
@@ -328,22 +492,79 @@ const App: React.FC = () => {
     if (filesToConvert.length === 0) return;
 
     setIsProcessingAll(true);
-    for (const file of filesToConvert) {
-      await convertSingleFile(file.id);
+
+    // Special handling for multi-file tools (they produce a single output)
+    if (activeTool.toolType === 'long-image') {
+      try {
+        // Mark all as processing
+        setFiles(prev => prev.map(f => ({ ...f, status: ConversionStatus.PROCESSING })));
+
+        const resultBlob = await stitchImages(files.map(f => f.file), {
+          direction: stitchDirection,
+          gap: stitchGap,
+          borderRadius: stitchBorderRadius,
+          backgroundColor: stitchBgColor,
+        });
+
+        const resultUrl = URL.createObjectURL(resultBlob);
+
+        // Mark first file as completed with the result, others as completed but empty
+        setFiles(prev => prev.map((f, index) => ({
+          ...f,
+          status: ConversionStatus.COMPLETED,
+          convertedUrl: index === 0 ? resultUrl : undefined,
+          convertedBlob: index === 0 ? resultBlob : undefined,
+        })));
+      } catch (error: any) {
+        console.error(error);
+        setFiles(prev => prev.map(f => ({
+          ...f,
+          status: ConversionStatus.ERROR,
+          errorMessage: error.message,
+        })));
+      }
+    } else {
+      // Normal per-file processing
+      for (const file of filesToConvert) {
+        await convertSingleFile(file.id);
+      }
     }
+
     setIsProcessingAll(false);
+  };
+
+  const getTargetExt = () => {
+    if (activeTool.id === 'format-convert') return batchTargetFormat.ext;
+    if (activeTool.toolType === 'compress' || activeTool.toolType === 'resize') {
+      return files[0]?.file.type.includes('png') ? 'png' : 'jpg';
+    }
+    // Explicitly handle long-image and grid-collage (if restored)
+    if (activeTool.toolType === 'long-image') return 'png';
+    return activeTool.targetExt || 'png';
   };
 
   const handleDownloadAll = async () => {
     const completedFiles = files.filter((f) => f.status === ConversionStatus.COMPLETED && f.convertedBlob);
     if (completedFiles.length === 0) return;
 
+    // For long-image, just download the single merged result directly
+    // Check both toolType and id to be safe
+    if (activeTool.toolType === 'long-image' || activeTool.id === 'long-image') {
+      const result = completedFiles.find(f => f.convertedBlob);
+      if (result && result.convertedUrl) {
+        const link = document.createElement('a');
+        link.href = result.convertedUrl;
+        link.download = `长图拼接_${Date.now()}.png`;
+        link.click();
+      }
+      return;
+    }
+
     setIsZipping(true);
     const zip = new JSZip();
 
-    const ext = activeTool.toolType === 'compress' || activeTool.toolType === 'resize'
-      ? (activeTool.id === 'batch-convert' ? batchTargetFormat.ext : 'png')
-      : (activeTool.id === 'batch-convert' ? batchTargetFormat.ext : activeTool.targetExt);
+    // Use getTargetExt() to ensure consistency and avoid undefined extension
+    const ext = getTargetExt();
 
     completedFiles.forEach((file) => {
       const originalName = file.file.name.substring(0, file.file.name.lastIndexOf('.'));
@@ -361,14 +582,6 @@ const App: React.FC = () => {
 
   const idleCount = files.filter((f) => f.status === ConversionStatus.IDLE).length;
   const completedCount = files.filter((f) => f.status === ConversionStatus.COMPLETED).length;
-
-  const getTargetExt = () => {
-    if (activeTool.id === 'batch-convert') return batchTargetFormat.ext;
-    if (activeTool.toolType === 'compress' || activeTool.toolType === 'resize') {
-      return files[0]?.file.type.includes('png') ? 'png' : 'jpg';
-    }
-    return activeTool.targetExt || 'png';
-  };
 
   return (
     <div className="flex h-screen bg-slate-100">
@@ -486,7 +699,100 @@ const App: React.FC = () => {
             );
           })()}
 
-          {activeTool.id === 'batch-convert' && (
+          {activeTool.toolType === 'rotate' && files.length > 0 && (
+            <RotateOptions
+              angle={rotateAngle}
+              flipH={flipH}
+              flipV={flipV}
+              onAngleChange={handleRotateAngleChange}
+              onFlipHChange={handleFlipHChange}
+              onFlipVChange={handleFlipVChange}
+            />
+          )}
+
+          {activeTool.toolType === 'brightness' && files.length > 0 && (
+            <BrightnessOptions
+              brightness={brightness}
+              contrast={contrast}
+              onBrightnessChange={handleBrightnessChange}
+              onContrastChange={handleContrastChange}
+              imgSrc={files[0].previewUrl}
+            />
+          )}
+
+          {activeTool.toolType === 'text-watermark' && files.length > 0 && (
+            <TextWatermarkOptions
+              text={wmText}
+              fontSize={wmFontSize}
+              fontFamily={wmFontFamily}
+              color={wmColor}
+              opacity={wmOpacity}
+              position={wmPosition}
+              rotation={wmRotation}
+              onTextChange={setWmText}
+              onFontSizeChange={setWmFontSize}
+              onFontFamilyChange={setWmFontFamily}
+              onColorChange={setWmColor}
+              onOpacityChange={setWmOpacity}
+              onPositionChange={setWmPosition}
+              onRotationChange={setWmRotation}
+              imgSrc={files[0].previewUrl}
+            />
+          )}
+
+          {activeTool.toolType === 'image-watermark' && files.length > 0 && (
+            <ImageWatermarkOptions
+              watermarkFile={imgWmFile}
+              position={imgWmPosition}
+              opacity={imgWmOpacity}
+              scale={imgWmScale}
+              onWatermarkFileChange={setImgWmFile}
+              onPositionChange={setImgWmPosition}
+              onOpacityChange={setImgWmOpacity}
+              onScaleChange={setImgWmScale}
+              imgSrc={files[0].previewUrl}
+            />
+          )}
+
+          {activeTool.toolType === 'long-image' && files.length > 0 && (
+            <LongImageOptions
+              files={files.map(f => ({ id: f.id, name: f.file.name, previewUrl: f.previewUrl, size: f.originalSize }))}
+              onReorder={(fromIndex, toIndex) => {
+                setFiles(prev => {
+                  const newFiles = [...prev];
+                  const [removed] = newFiles.splice(fromIndex, 1);
+                  newFiles.splice(toIndex, 0, removed);
+                  return newFiles;
+                });
+              }}
+              onRemove={(id) => {
+                setFiles(prev => prev.filter(f => f.id !== id));
+              }}
+              direction={stitchDirection}
+              gap={stitchGap}
+              borderRadius={stitchBorderRadius}
+              backgroundColor={stitchBgColor}
+              onDirectionChange={setStitchDirection}
+              onGapChange={setStitchGap}
+              onBorderRadiusChange={setStitchBorderRadius}
+              onBackgroundColorChange={setStitchBgColor}
+            />
+          )}
+
+          {activeTool.toolType === 'color-picker' && files.length > 0 && (
+            <ColorPickerOptions imgSrc={files[0].previewUrl} />
+          )}
+
+          {activeTool.toolType === 'video-screenshot' && videoFile && (
+            <VideoScreenshotOptions
+              videoFile={videoFile}
+              onScreenshotCapture={(blob, timestamp) => {
+                setVideoScreenshots(prev => [...prev, { blob, timestamp }]);
+              }}
+            />
+          )}
+
+          {activeTool.id === 'format-convert' && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
               <h3 className="font-semibold text-slate-700 mb-4">选择目标格式</h3>
               <div className="flex gap-3">
@@ -557,14 +863,24 @@ const App: React.FC = () => {
               {/* File list */}
               {files.length > 0 && (
                 <div className="space-y-3">
-                  {files.map((file) => (
-                    <ImageListItem
-                      key={file.id}
-                      item={file}
-                      targetExt={getTargetExt()}
-                      onRemove={handleRemoveFile}
-                    />
-                  ))}
+                  {files.map((file) => {
+                    // Only show grayscale preview in thumbnails
+                    // Brightness has its own large preview panel
+                    let previewFilter: string | undefined;
+                    if (activeTool.toolType === 'grayscale') {
+                      previewFilter = 'grayscale(100%)';
+                    }
+
+                    return (
+                      <ImageListItem
+                        key={file.id}
+                        item={file}
+                        targetExt={getTargetExt()}
+                        onRemove={handleRemoveFile}
+                        previewFilter={previewFilter}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </>

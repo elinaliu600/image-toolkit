@@ -7,9 +7,20 @@ interface ImageListItemProps {
   item: ImageFile;
   targetExt: string;
   onRemove: (id: string) => void;
+  previewFilter?: string; // CSS filter for real-time preview
 }
 
-export const ImageListItem: React.FC<ImageListItemProps> = ({ item, targetExt, onRemove }) => {
+export const ImageListItem: React.FC<ImageListItemProps> = ({
+  item,
+  targetExt,
+  onRemove,
+  previewFilter
+}) => {
+  // Only apply preview filter if status is IDLE (not yet converted)
+  const filterStyle = item.status === ConversionStatus.IDLE && previewFilter
+    ? { filter: previewFilter }
+    : undefined;
+
   return (
     <div className="flex items-center gap-4 bg-white p-3 rounded-xl shadow-sm border border-slate-100 group transition-all hover:shadow-md">
       {/* Thumbnail */}
@@ -17,7 +28,8 @@ export const ImageListItem: React.FC<ImageListItemProps> = ({ item, targetExt, o
         <img
           src={item.status === ConversionStatus.COMPLETED && item.convertedUrl ? item.convertedUrl : item.previewUrl}
           alt={item.file.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-all"
+          style={filterStyle}
         />
         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
       </div>
