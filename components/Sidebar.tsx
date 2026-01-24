@@ -118,12 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ))}
                 </nav>
 
-                {/* Footer */}
-                <div className="p-4 border-t border-slate-700/50">
-                    <div className="px-3 py-2 rounded-xl bg-slate-700/30 text-xs text-slate-400">
-                        💡 所有转换均在浏览器本地完成，图片不会上传到服务器
-                    </div>
-                </div>
+
             </aside>
         </>
     );
