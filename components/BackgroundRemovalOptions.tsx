@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Scissors, Loader2, Download, Check, Palette, RefreshCw, Trash2, X } from 'lucide-react';
+import { Scissors, Loader2, Download, Check, Palette, RefreshCw, Trash2, X, Brush } from 'lucide-react';
+import { RefineBackgroundRemoval } from './RefineBackgroundRemoval';
 
 interface BgRemovalResult {
     id: string;
@@ -15,6 +16,7 @@ interface BackgroundRemovalOptionsProps {
     files: { id: string; name: string; previewUrl: string; file: File }[];
     onProcessComplete: (id: string, resultBlob: Blob) => void;
     onRemoveFile: (id: string) => void;
+    onClearAll: () => void;
 }
 
 const PREVIEW_BACKGROUNDS = [
@@ -30,6 +32,7 @@ export const BackgroundRemovalOptions: React.FC<BackgroundRemovalOptionsProps> =
     files,
     onProcessComplete,
     onRemoveFile,
+    onClearAll,
 }) => {
     const [results, setResults] = useState<BgRemovalResult[]>([]);
     const [isModelLoading, setIsModelLoading] = useState(false);
@@ -38,6 +41,7 @@ export const BackgroundRemovalOptions: React.FC<BackgroundRemovalOptionsProps> =
     const [customBgColor, setCustomBgColor] = useState('#FFFFFF');
     const [isProcessingAll, setIsProcessingAll] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [refiningFileId, setRefiningFileId] = useState<string | null>(null);
 
     // Initialize results from files
     useEffect(() => {
@@ -174,6 +178,12 @@ export const BackgroundRemovalOptions: React.FC<BackgroundRemovalOptionsProps> =
             {/* Action buttons */}
             <div className="flex flex-wrap items-center gap-3">
                 <button
+                    onClick={onClearAll}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-medium hover:bg-slate-200 transition-colors"
+                >
+                    <Trash2 className="w-4 h-4" /> 清除全部
+                </button>
+                <button
                     onClick={processAll}
                     disabled={isProcessingAll || idleCount === 0}
                     className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -265,12 +275,20 @@ export const BackgroundRemovalOptions: React.FC<BackgroundRemovalOptionsProps> =
                                 </button>
                             )}
                             {currentResult?.status === 'completed' && (
-                                <button
-                                    onClick={() => downloadResult(currentResult, currentFile.name)}
-                                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-                                >
-                                    <Download className="w-4 h-4" /> 下载
-                                </button>
+                                <>
+                                    <button
+                                        onClick={() => setRefiningFileId(currentFile.id)}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600"
+                                    >
+                                        <Brush className="w-4 h-4" /> 精修
+                                    </button>
+                                    <button
+                                        onClick={() => downloadResult(currentResult, currentFile.name)}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+                                    >
+                                        <Download className="w-4 h-4" /> 下载
+                                    </button>
+                                </>
                             )}
                         </div>
                     </div>
@@ -322,6 +340,29 @@ export const BackgroundRemovalOptions: React.FC<BackgroundRemovalOptionsProps> =
                     </div>
                 </div>
             )}
+
+            {/* Refine modal */}
+            {refiningFileId && (() => {
+                const file = files.find(f => f.id === refiningFileId);
+                const result = results.find(r => r.id === refiningFileId);
+                if (!file || !result?.resultUrl) return null;
+
+                return (
+                    <RefineBackgroundRemoval
+                        originalImage={file.previewUrl}
+                        maskImage={result.resultUrl}
+                        onComplete={(blob) => {
+                            const url = URL.createObjectURL(blob);
+                            setResults(prev => prev.map(r =>
+                                r.id === refiningFileId ? { ...r, resultUrl: url, resultBlob: blob } : r
+                            ));
+                            onProcessComplete(refiningFileId, blob);
+                            setRefiningFileId(null);
+                        }}
+                        onCancel={() => setRefiningFileId(null)}
+                    />
+                );
+            })()}
         </div>
     );
 };

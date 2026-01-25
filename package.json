@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
+    "@upscalerjs/esrgan-medium": "^1.0.0-beta.13",
     "jszip": "3.10.1",
     "lucide-react": "0.344.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-image-crop": "^11.0.10"
+    "react-image-crop": "^11.0.10",
+    "upscaler": "^1.0.0-beta.19"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

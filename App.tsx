@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   Images, Zap, Trash2, DownloadCloud, Loader2, Menu, X,
   FileImage, FileType, Minimize2, Maximize2, Film, Box, ArrowRightLeft, Crop,
-  RotateCw, Sun, Contrast, Type, Stamp, Rows, LayoutGrid, Pipette, Camera, Clapperboard, Scissors
+  RotateCw, Sun, Contrast, Type, Stamp, Rows, LayoutGrid, Pipette, Camera, Clapperboard, Scissors, ZoomIn
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { Sidebar } from './components/Sidebar';
@@ -21,6 +21,7 @@ import { LongImageOptions } from './components/LongImageOptions';
 import { ColorPickerOptions } from './components/ColorPickerOptions';
 import { VideoScreenshotOptions } from './components/VideoScreenshotOptions';
 import { BackgroundRemovalOptions } from './components/BackgroundRemovalOptions';
+import { UpscaleOptions } from './components/UpscaleOptions';
 import { PixelCrop } from 'react-image-crop';
 import { ImageFile, ConversionStatus, ToolConfig, GifFrame, ICO_SIZES } from './types';
 import {
@@ -143,6 +144,15 @@ const TOOLS: ToolConfig[] = [
     icon: Scissors,
     accept: 'image/*',
     toolType: 'bg-removal',
+    category: 'ai'
+  },
+  {
+    id: 'upscale',
+    name: '图片变清晰',
+    description: 'AI 放大模糊图片',
+    icon: ZoomIn,
+    accept: 'image/*',
+    toolType: 'upscale',
     category: 'ai'
   },
 
@@ -820,6 +830,20 @@ const App: React.FC = () => {
                 ));
               }}
               onRemoveFile={handleRemoveFile}
+              onClearAll={handleClearAll}
+            />
+          )}
+
+          {activeTool.toolType === 'upscale' && files.length > 0 && (
+            <UpscaleOptions
+              files={files.map(f => ({ id: f.id, name: f.file.name, previewUrl: f.previewUrl, file: f.file }))}
+              onProcessComplete={(id, blob) => {
+                setFiles(prev => prev.map(f =>
+                  f.id === id ? { ...f, status: ConversionStatus.COMPLETED, convertedBlob: blob, convertedUrl: URL.createObjectURL(blob) } : f
+                ));
+              }}
+              onRemoveFile={handleRemoveFile}
+              onClearAll={handleClearAll}
             />
           )}
 

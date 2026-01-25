@@ -32,7 +32,8 @@ export type ToolType =
   | 'gif-extract'   // GIF frame extraction
   | 'apng'          // APNG creation
   // AI tools
-  | 'bg-removal';   // AI background removal
+  | 'bg-removal'   // AI background removal
+  | 'upscale';     // AI image super-resolution
 
 export type ToolCategory =
   | 'format'      // 格式转换
