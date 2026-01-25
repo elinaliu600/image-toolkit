@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   Images, Zap, Trash2, DownloadCloud, Loader2, Menu, X,
   FileImage, FileType, Minimize2, Maximize2, Film, Box, ArrowRightLeft, Crop,
-  RotateCw, Sun, Contrast, Type, Stamp, Rows, LayoutGrid, Pipette, Camera, Clapperboard
+  RotateCw, Sun, Contrast, Type, Stamp, Rows, LayoutGrid, Pipette, Camera, Clapperboard, Scissors
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { Sidebar } from './components/Sidebar';
@@ -20,6 +20,7 @@ import { ImageWatermarkOptions } from './components/ImageWatermarkOptions';
 import { LongImageOptions } from './components/LongImageOptions';
 import { ColorPickerOptions } from './components/ColorPickerOptions';
 import { VideoScreenshotOptions } from './components/VideoScreenshotOptions';
+import { BackgroundRemovalOptions } from './components/BackgroundRemovalOptions';
 import { PixelCrop } from 'react-image-crop';
 import { ImageFile, ConversionStatus, ToolConfig, GifFrame, ICO_SIZES } from './types';
 import {
@@ -134,6 +135,17 @@ const TOOLS: ToolConfig[] = [
     category: 'collage'
   },
 
+  // ========== AI 抠图 ==========
+  {
+    id: 'bg-removal',
+    name: '自动抠图',
+    description: 'AI 智能去除图片背景',
+    icon: Scissors,
+    accept: 'image/*',
+    toolType: 'bg-removal',
+    category: 'ai'
+  },
+
   // ========== 取色工具 ==========
   {
     id: 'color-picker',
@@ -222,6 +234,8 @@ const App: React.FC = () => {
   // Crop states
   const [crop, setCrop] = useState<PixelCrop>({ unit: 'px', x: 0, y: 0, width: 0, height: 0 });
   const [activeCropFileId, setActiveCropFileId] = useState<string>('');
+  const [cropScaleX, setCropScaleX] = useState(1);
+  const [cropScaleY, setCropScaleY] = useState(1);
 
   // Rotate states
   const [rotateAngle, setRotateAngle] = useState(0);
@@ -258,8 +272,10 @@ const App: React.FC = () => {
   const [videoScreenshots, setVideoScreenshots] = useState<{ blob: Blob; timestamp: number }[]>([]);
 
   // Watch for crop changes to reset status
-  const handleCropChange = (newCrop: PixelCrop) => {
+  const handleCropChange = (newCrop: PixelCrop, scaleX: number, scaleY: number) => {
     setCrop(newCrop);
+    setCropScaleX(scaleX);
+    setCropScaleY(scaleY);
     if (activeTool.toolType === 'crop' && files.some(f => f.status === ConversionStatus.COMPLETED)) {
       setFiles(prev => prev.map(f => f.status === ConversionStatus.COMPLETED ? { ...f, status: ConversionStatus.IDLE } : f));
     }
@@ -412,12 +428,15 @@ const App: React.FC = () => {
           convertedBlob = await resizeImage(fileItem.file, resizeWidth, resizeHeight, maintainAspect);
           break;
         case 'crop':
-          // Ensure we have valid crop
+          // Ensure we have valid crop - multiply by scale to get actual pixel coordinates
           if (crop.width > 0 && crop.height > 0) {
-            convertedBlob = await cropImage(fileItem.file, crop.x, crop.y, crop.width, crop.height);
+            const actualX = Math.round(crop.x * cropScaleX);
+            const actualY = Math.round(crop.y * cropScaleY);
+            const actualWidth = Math.round(crop.width * cropScaleX);
+            const actualHeight = Math.round(crop.height * cropScaleY);
+            convertedBlob = await cropImage(fileItem.file, actualX, actualY, actualWidth, actualHeight);
           } else {
-            // Return original if no crop set? Or fail? 
-            // Better to return original or error. returning original for safety.
+            // Return original if no crop set
             convertedBlob = await convertImage(fileItem.file, fileItem.file.type);
           }
           break;
@@ -789,6 +808,18 @@ const App: React.FC = () => {
               onScreenshotCapture={(blob, timestamp) => {
                 setVideoScreenshots(prev => [...prev, { blob, timestamp }]);
               }}
+            />
+          )}
+
+          {activeTool.toolType === 'bg-removal' && files.length > 0 && (
+            <BackgroundRemovalOptions
+              files={files.map(f => ({ id: f.id, name: f.file.name, previewUrl: f.previewUrl, file: f.file }))}
+              onProcessComplete={(id, blob) => {
+                setFiles(prev => prev.map(f =>
+                  f.id === id ? { ...f, status: ConversionStatus.COMPLETED, convertedBlob: blob, convertedUrl: URL.createObjectURL(blob) } : f
+                ));
+              }}
+              onRemoveFile={handleRemoveFile}
             />
           )}
 

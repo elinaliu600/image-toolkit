@@ -1,18 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import { AlignCenter, Maximize, Lock, Unlock, Grid, AlertTriangle } from 'lucide-react';
 import 'react-image-crop/dist/ReactCrop.css';
 
 interface CropOptionsProps {
-    imgSrc: string; // The reference image URL
+    imgSrc: string;
     crop: PixelCrop;
-    onCropChange: (crop: PixelCrop) => void;
-    files: { id: string; name: string }[]; // List of files for switching reference
+    onCropChange: (crop: PixelCrop, scaleX: number, scaleY: number) => void;
+    files: { id: string; name: string }[];
     activeFileId: string;
     onActiveFileChange: (id: string) => void;
 }
 
-// Helper to center the crop initially
 function centerAspectCrop(
     mediaWidth: number,
     mediaHeight: number,
@@ -20,10 +19,7 @@ function centerAspectCrop(
 ) {
     return centerCrop(
         makeAspectCrop(
-            {
-                unit: '%',
-                width: 80,
-            },
+            { unit: '%', width: 80 },
             aspect,
             mediaWidth,
             mediaHeight,
@@ -43,47 +39,53 @@ export const CropOptions: React.FC<CropOptionsProps> = ({
 }) => {
     const imgRef = useRef<HTMLImageElement>(null);
     const [aspect, setAspect] = useState<number | undefined>(undefined);
-    const [completedCrop, setCompletedCrop] = useState<PixelCrop>(crop);
     const [internalCrop, setInternalCrop] = useState<Crop>();
 
-    // Initialize crop when image loads
-    function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-        const { width, height } = e.currentTarget;
+    // Track scale ratio between displayed image and actual image
+    const [scaleX, setScaleX] = useState(1);
+    const [scaleY, setScaleY] = useState(1);
+    const [actualWidth, setActualWidth] = useState(0);
+    const [actualHeight, setActualHeight] = useState(0);
 
-        // If we already have a specialized crop from parent, try to convert it to % for ReactCrop
-        // Or just start centered if it's a fresh file switch? 
-        // For now, let's defer to manual control unless it's the very first load
+    // Calculate actual pixel values for display
+    const actualCropX = Math.round(crop.x * scaleX);
+    const actualCropY = Math.round(crop.y * scaleY);
+    const actualCropWidth = Math.round(crop.width * scaleX);
+    const actualCropHeight = Math.round(crop.height * scaleY);
+
+    function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+        const img = e.currentTarget;
+        const displayWidth = img.width;
+        const displayHeight = img.height;
+        const naturalWidth = img.naturalWidth;
+        const naturalHeight = img.naturalHeight;
+
+        // Calculate scale ratio
+        const sX = naturalWidth / displayWidth;
+        const sY = naturalHeight / displayHeight;
+        setScaleX(sX);
+        setScaleY(sY);
+        setActualWidth(naturalWidth);
+        setActualHeight(naturalHeight);
+
         if (crop.width === 0 && crop.height === 0) {
-            // Default to center 80% with no aspect
             const center = centerCrop(
                 { unit: '%', width: 80, height: 80 },
-                width,
-                height
+                displayWidth,
+                displayHeight
             );
-            // We need to convert this % crop to pixels for our parent state immediately
-            // Actually ReactCrop onChange handles this. We just set internal state.
             setInternalCrop(center);
         } else {
-            // Convert pixel crop back to what ReactCrop might expect? 
-            // ReactCrop works fine with pixel units if we pass unit: 'px'
             setInternalCrop({ unit: 'px', ...crop });
         }
     }
 
-    // Handle aspect ratio change
     const handleAspectChange = (value: number | undefined) => {
         setAspect(value);
         if (value && imgRef.current) {
             const { width, height } = imgRef.current;
             const newCrop = centerAspectCrop(width, height, value);
             setInternalCrop(newCrop);
-            // Trigger update to parent? 
-            // We'll let the user adjust it or let the onChange fire
-            // Actually better to apply it immediately:
-            // But we need pixel values for parent. ReactCrop onChange gives us that.
-            // We can force a manual trigger:
-            // Let's just set internal crop, and when user drags it will lock. 
-            // Or we can manually calculate pixel crop here. 
             const pixelCrop = {
                 x: newCrop.x * width / 100,
                 y: newCrop.y * height / 100,
@@ -91,9 +93,13 @@ export const CropOptions: React.FC<CropOptionsProps> = ({
                 height: newCrop.height * height / 100,
                 unit: 'px'
             } as PixelCrop;
-            onCropChange(pixelCrop);
+            onCropChange(pixelCrop, scaleX, scaleY);
         }
     };
+
+    const handleCropComplete = useCallback((c: PixelCrop) => {
+        onCropChange(c, scaleX, scaleY);
+    }, [onCropChange, scaleX, scaleY]);
 
     const ASPECT_RATIOS = [
         { label: '自由', value: undefined },
@@ -111,10 +117,7 @@ export const CropOptions: React.FC<CropOptionsProps> = ({
                 <ReactCrop
                     crop={internalCrop}
                     onChange={(_, percentCrop) => setInternalCrop(percentCrop)}
-                    onComplete={(c) => {
-                        setCompletedCrop(c);
-                        onCropChange(c);
-                    }}
+                    onComplete={handleCropComplete}
                     aspect={aspect}
                     ruleOfThirds
                     minWidth={10}
@@ -136,7 +139,7 @@ export const CropOptions: React.FC<CropOptionsProps> = ({
                 {/* File Switcher */}
                 {files.length > 1 && (
                     <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                        <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block">参考图片 (Reference)</label>
+                        <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block">参考图片</label>
                         <select
                             value={activeFileId}
                             onChange={(e) => onActiveFileChange(e.target.value)}
@@ -149,23 +152,33 @@ export const CropOptions: React.FC<CropOptionsProps> = ({
                     </div>
                 )}
 
+                {/* Image info */}
+                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 text-sm">
+                    <div className="flex justify-between text-indigo-700">
+                        <span>原图尺寸:</span>
+                        <span className="font-mono">{actualWidth} × {actualHeight} px</span>
+                    </div>
+                    <div className="flex justify-between text-indigo-600 text-xs mt-1">
+                        <span>缩放比例:</span>
+                        <span className="font-mono">{scaleX.toFixed(2)}x</span>
+                    </div>
+                </div>
+
                 {/* Aspect Ratio */}
                 <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                     <div className="flex items-center gap-2 mb-3">
                         {aspect ? <Lock className="w-4 h-4 text-indigo-500" /> : <Unlock className="w-4 h-4 text-slate-400" />}
-                        <label className="text-sm font-semibold text-slate-800">比例 (Aspect Ratio)</label>
+                        <label className="text-sm font-semibold text-slate-800">比例</label>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {ASPECT_RATIOS.map((ratio) => (
                             <button
                                 key={String(ratio.value)}
                                 onClick={() => handleAspectChange(ratio.value)}
-                                className={`
-                            px-2 py-1.5 text-xs font-medium rounded-md transition-colors border
-                            ${aspect === ratio.value
+                                className={`px-2 py-1.5 text-xs font-medium rounded-md transition-colors border
+                                    ${aspect === ratio.value
                                         ? 'bg-indigo-50 text-indigo-600 border-indigo-200'
-                                        : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'}
-                        `}
+                                        : 'bg-slate-50 text-slate-600 border-slate-100 hover:bg-slate-100'}`}
                             >
                                 {ratio.label}
                             </button>
@@ -173,71 +186,43 @@ export const CropOptions: React.FC<CropOptionsProps> = ({
                     </div>
                 </div>
 
-                {/* Coordinates */}
+                {/* Coordinates - showing ACTUAL pixel values */}
                 <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
                     <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                        <Maximize className="w-4 h-4" /> 坐标与尺寸
+                        <Maximize className="w-4 h-4" /> 裁切尺寸 (实际像素)
                     </h4>
 
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <label className="text-xs text-slate-500">宽度 (W)</label>
-                            <input
-                                type="number"
-                                value={Math.round(crop.width)}
-                                onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    onCropChange({ ...crop, width: val });
-                                    setInternalCrop({ ...crop, width: val, unit: 'px' });
-                                }}
-                                className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"
-                            />
+                            <label className="text-xs text-slate-500">宽度</label>
+                            <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 font-mono">
+                                {actualCropWidth} px
+                            </div>
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-slate-500">高度 (H)</label>
-                            <input
-                                type="number"
-                                value={Math.round(crop.height)}
-                                onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    onCropChange({ ...crop, height: val });
-                                    setInternalCrop({ ...crop, height: val, unit: 'px' });
-                                }}
-                                className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"
-                            />
+                            <label className="text-xs text-slate-500">高度</label>
+                            <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 font-mono">
+                                {actualCropHeight} px
+                            </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-slate-500">X 坐标</label>
-                            <input
-                                type="number"
-                                value={Math.round(crop.x)}
-                                onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    onCropChange({ ...crop, x: val });
-                                    setInternalCrop({ ...crop, x: val, unit: 'px' });
-                                }}
-                                className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"
-                            />
+                            <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 font-mono">
+                                {actualCropX} px
+                            </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-slate-500">Y 坐标</label>
-                            <input
-                                type="number"
-                                value={Math.round(crop.y)}
-                                onChange={(e) => {
-                                    const val = Number(e.target.value);
-                                    onCropChange({ ...crop, y: val });
-                                    setInternalCrop({ ...crop, y: val, unit: 'px' });
-                                }}
-                                className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700"
-                            />
+                            <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 font-mono">
+                                {actualCropY} px
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="text-xs text-slate-400 leading-relaxed px-1 space-y-2">
-                    <p>* 裁切框将以绝对像素坐标应用到所有图片。请确保批量上传的图片尺寸一致，否则可能导致裁切位置偏移。</p>
-                    {(crop.width < 10 || crop.height < 10) && (
+                    <p>* 显示的尺寸为实际导出像素值，已根据原图比例自动换算。</p>
+                    {(actualCropWidth < 10 || actualCropHeight < 10) && (
                         <p className="flex items-center gap-1.5 text-amber-600 bg-amber-50 p-2 rounded">
                             <AlertTriangle className="w-3.5 h-3.5" />
                             <span>裁切尺寸不能小于 10px</span>

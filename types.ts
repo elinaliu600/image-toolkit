@@ -30,16 +30,19 @@ export type ToolType =
   // Animation tools
   | 'ico'           // ICO generator
   | 'gif-extract'   // GIF frame extraction
-  | 'apng';         // APNG creation
+  | 'apng'          // APNG creation
+  // AI tools
+  | 'bg-removal';   // AI background removal
 
-export type ToolCategory = 
+export type ToolCategory =
   | 'format'      // 格式转换
   | 'edit'        // 图片编辑
   | 'watermark'   // 水印工具
   | 'collage'     // 拼图工具
   | 'color'       // 取色工具
   | 'video'       // 视频工具
-  | 'animation';  // 动图工具
+  | 'animation'   // 动图工具
+  | 'ai';         // AI 工具
 
 export interface ToolConfig {
   id: string;
@@ -89,4 +92,5 @@ export const CATEGORY_LABELS: Record<ToolCategory, string> = {
   color: '取色工具',
   video: '视频工具',
   animation: '动图工具',
+  ai: 'AI 工具',
 };

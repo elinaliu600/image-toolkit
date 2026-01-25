@@ -15,6 +15,7 @@ const CATEGORY_ORDER: ToolCategory[] = [
     'edit',
     'watermark',
     'collage',
+    'ai',
     'color',
     'video',
     'animation',
